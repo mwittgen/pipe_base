@@ -20,7 +20,16 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from __future__ import annotations
 
-__all__ = ("ConfigIR", "ContractError", "ContractIR", "ImportIR", "PipelineIR", "TaskIR", "LabeledSubset")
+__all__ = (
+    "ConfigIR",
+    "ContractError",
+    "ContractIR",
+    "ImportIR",
+    "PipelineIR",
+    "TaskIR",
+    "LabeledSubset",
+    "standardize_uri_in_pipeline",
+)
 
 import copy
 import enum
@@ -39,6 +48,36 @@ from lsst.resources import ResourcePath, ResourcePathExpression
 
 class _Tags(enum.Enum):
     KeepInstrument = enum.auto()
+
+
+def standardize_uri_in_pipeline(path: str, directory: Optional[ResourcePath]) -> ResourcePath:
+    """Standardize a URI inside a pipeline description by expanding environment
+    variables and interpreting (or rejecting) relative paths.
+
+    Parameters
+    ----------
+    path : `str`
+        Path to standardize.
+    directory : `ResourcePath` or `None`
+        Directory URI that relative paths should be considered relative to.
+
+    Returns
+    -------
+    uri : `ResourcePath`
+        Standardized URI.
+
+    Raises
+    ------
+    RuntimeError
+        Raised if ``path`` is relative but ``directory`` is `None`.
+    """
+    uri = ResourcePath(os.path.expandvars(path), forceAbsolute=False)
+    if not uri.isabs():
+        if directory is not None:
+            uri = directory.join(uri)
+        else:
+            raise RuntimeError(f"Path '{uri}' in pipeline is relative, but pipeline directory is unknown.")
+    return uri
 
 
 class PipelineYamlLoader(yaml.SafeLoader):
@@ -433,9 +472,17 @@ class ImportIR:
     any declared instrument prior to import.
     """
 
-    def toPipelineIR(self) -> "PipelineIR":
+    def toPipelineIR(self, directory: Optional[ResourcePath] = None) -> "PipelineIR":
         """Load in the Pipeline specified by this object, and turn it into a
         PipelineIR instance.
+
+        Parameters
+        ----------
+        directory : `ResourcePath` or `None`
+            Directory URI that a relative ``location`` should be considered
+            relative to.  Note that this is generally the directory of the
+            pipeline containing the ``import`` directive, not the directory
+            of the imported pipeline itself.
 
         Returns
         -------
@@ -447,7 +494,7 @@ class ImportIR:
                 "An include list and an exclude list cannot both be specified"
                 " when declaring a pipeline import."
             )
-        tmp_pipeline = PipelineIR.from_uri(os.path.expandvars(self.location))
+        tmp_pipeline = PipelineIR.from_uri(standardize_uri_in_pipeline(self.location, directory=directory))
         if self.instrument is not _Tags.KeepInstrument:
             tmp_pipeline.instrument = self.instrument
 
@@ -499,6 +546,11 @@ class PipelineIR:
     loaded_yaml : `dict`
         A dictionary which matches the structure that would be produced by a
         yaml reader which parses a pipeline definition document
+    directory : `ResourcePath`, optional
+        The path to the directory in which the pipeline is defined.  Relative
+        import and config file paths are interpreted as relative to this
+        directory.  If `None` (default), relative paths are considered an
+        error.
 
     Raises
     ------
@@ -511,12 +563,14 @@ class PipelineIR:
         - more than one inherited pipeline share a label.
     """
 
-    def __init__(self, loaded_yaml: Dict[str, Any]):
+    def __init__(self, loaded_yaml: Dict[str, Any], directory: Optional[ResourcePath] = None):
         # Check required fields are present
         if "description" not in loaded_yaml:
             raise ValueError("A pipeline must be declared with a description")
         if "tasks" not in loaded_yaml and len({"imports", "inherits"} - loaded_yaml.keys()) == 2:
             raise ValueError("A pipeline must be declared with one or more tasks")
+
+        self.directory = directory
 
         # These steps below must happen in this call order
 
@@ -658,7 +712,7 @@ class PipelineIR:
         accumulate_labeled_subsets: Dict[str, LabeledSubset] = {}
         accumulated_parameters = ParametersIR({})
         for other_pipeline in self.imports:
-            tmp_IR = other_pipeline.toPipelineIR()
+            tmp_IR = other_pipeline.toPipelineIR(directory=self.directory)
             if self.instrument is None:
                 self.instrument = tmp_IR.instrument
             elif self.instrument != tmp_IR.instrument and tmp_IR.instrument is not None:
@@ -839,7 +893,7 @@ class PipelineIR:
         return pipeline
 
     @classmethod
-    def from_string(cls, pipeline_string: str) -> PipelineIR:
+    def from_string(cls, pipeline_string: str, directory: Optional[ResourcePath] = None):
         """Create a `PipelineIR` object from a string formatted like a pipeline
         document
 
@@ -847,9 +901,15 @@ class PipelineIR:
         ----------
         pipeline_string : `str`
             A string that is formatted according like a pipeline document
+        directory : `ResourcePath`, optional
+            The path to the directory in which the pipeline is defined.
+            Relative import and config file paths are interpreted as relative
+            to this directory.  If `None` (default), the directory must be
+            provided when the pipeline is expanded or relative paths will be
+            considered an error.
         """
         loaded_yaml = yaml.load(pipeline_string, Loader=PipelineYamlLoader)
-        return cls(loaded_yaml)
+        return cls(loaded_yaml, directory)
 
     @classmethod
     @deprecated(
@@ -895,7 +955,7 @@ class PipelineIR:
         loaded_uri = ResourcePath(uri)
         with loaded_uri.open("r") as buffer:
             loaded_yaml = yaml.load(buffer, Loader=PipelineYamlLoader)
-            return cls(loaded_yaml)
+            return cls(loaded_yaml, directory=loaded_uri.parent())
 
     @deprecated(
         reason="This has been replaced with `write_to_uri`. will be removed after v23",

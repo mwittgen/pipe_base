@@ -25,6 +25,7 @@ import textwrap
 import unittest
 
 import lsst.utils.tests
+from lsst.resources import ResourcePath
 from lsst.pipe.base.pipelineIR import ConfigIR, PipelineIR
 
 # Find where the test pipelines exist and store it in an environment variable.
@@ -311,6 +312,20 @@ class PipelineIRTestCase(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             PipelineIR.from_string(pipeline_str)
+
+        # Test that importing with a relative path fails as expected.
+        pipeline_str = textwrap.dedent(
+            """
+        description: Test Pipeline
+        imports:
+              - testPipeline1.yaml
+        """
+        )
+        with self.assertRaises(RuntimeError):
+            PipelineIR.from_string(pipeline_str)
+        # and that this works when we provide a directory.
+        pipeline = PipelineIR.from_string(pipeline_str, ResourcePath(os.environ["TESTDIR"]))
+        self.assertEqual(set(pipeline.tasks.keys()), set(["modA", "modB"]))
 
     def testReadParameters(self):
         # verify that parameters section are read in from a pipeline
