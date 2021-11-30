@@ -293,7 +293,7 @@ class Pipeline:
 
         Parameters
         ----------
-        uri: convertible to `ResourcePath`
+        uri : convertible to `ResourcePath`
             If a string is supplied this should be a URI path that points to a
             pipeline defined in yaml format, either as a direct path to the
             yaml file, or as a directory containing a "pipeline.yaml" file (the
@@ -311,7 +311,7 @@ class Pipeline:
 
         Returns
         -------
-        pipeline: `Pipeline`
+        pipeline : `Pipeline`
             The pipeline loaded from specified location with appropriate (if
             any) subsetting
 
@@ -324,6 +324,8 @@ class Pipeline:
         """
         # Split up the uri and any labels that were supplied
         uri, label_specifier = cls._parse_file_specifier(uri)
+        if uri.dirLike:
+            uri = uri.join("pipeline.yaml")
         pipeline: Pipeline = cls.fromIR(pipelineIR.PipelineIR.from_uri(uri))
 
         # If there are labels supplied, only keep those
@@ -632,7 +634,12 @@ class Pipeline:
     def toFile(self, filename: str) -> None:
         self._pipelineIR.to_file(filename)
 
-    def write_to_uri(self, uri: ResourcePathExpression) -> None:
+    def write_to_uri(
+        self,
+        uri: ResourcePathExpression,
+        expand: bool = False,
+        task_defs: Optional[Iterable[TaskDef]] = None,
+    ) -> None:
         """Write the pipeline to a file or directory.
 
         Parameters
@@ -640,9 +647,30 @@ class Pipeline:
         uri : convertible to `ResourcePath`
             URI to write to; may have any scheme with `ResourcePath` write
             support or no scheme for a local file/directory.  Should have a
-            ``.yaml``.
+            ``.yaml`` extension if ``expand=False`` and a trailing slash
+            (indicating a directory-like URI) if ``expand=True``.
+        expand : `bool`, optional
+            If `False`, write the pipeline to a single YAML file with
+            references to configuration files and other config overrides
+            unexpanded and unapplied, with tasks and subsets only minimally
+            validated (and not imported).  If `True`, import all tasks, apply
+            all configuration overrides (including those supplied by an
+            instrument), resolve parameters, sort all sections
+            deterministically, and write the pipeline to a directory with
+            separate config files for each task as well as a single
+            ``pipeline.yaml`` file.
+        task_defs : `Iterable` [ `TaskDef` ], optional
+            Output of `toExpandedPipeline`; may be passed to avoid a second
+            call to that method internally.  Ignored unless ``expand=True``.
         """
-        self._pipelineIR.write_to_uri(uri)
+        if expand:
+            if str(uri).endswith(".yaml"):
+                raise RuntimeError(
+                    f"Expanded pipelines are written to directories, not YAML files like {uri}."
+                )
+            self._write_expanded_dir(ResourcePath(uri, forceDirectory=True), task_defs=task_defs)
+        else:
+            self._pipelineIR.write_to_uri(uri)
 
     def toExpandedPipeline(self) -> Generator[TaskDef, None, None]:
         """Returns a generator of TaskDefs which can be used to create quantum
@@ -739,6 +767,43 @@ class Pipeline:
         raise NotImplementedError(
             "Pipelines cannot be compared because config instances cannot be compared; see DM-27847."
         )
+
+    def _write_expanded_dir(
+        self, uri: ResourcePathExpression, task_defs: Optional[Iterable[TaskDef]] = None
+    ) -> None:
+        """Internal implementation of `write_to_uri` with ``expand=True`` and
+        a directory-like URI.
+
+        Parameters
+        ----------
+        uri : convertible to `ResourcePath`
+            URI to write to; may have any scheme with `ResourcePath` write
+            support or no scheme for a local file/directory.  Should have a
+            trailing slash (indicating a directory-like URI).
+        task_defs : `Iterable` [ `TaskDef` ], optional
+            Output of `toExpandedPipeline`; may be passed to avoid a second
+            call to that method internally.
+        """
+        assert uri.dirLike, f"{uri} is not a directory-like URI."
+        # Expand the pipeline.  This applies all config overrides, applies all
+        # parameters, checks contracts, and sorts tasks topologically with
+        # lexicographical (on label) tiebreaking.
+        if task_defs is not None:
+            task_defs = list(task_defs)
+        else:
+            task_defs = list(self.toExpandedPipeline())
+        uri.mkdir()
+        config_dir_uri = uri.join("config/")
+        config_dir_uri.mkdir()
+        expanded_tasks: Dict[str, pipelineIR.TaskIR] = {}
+        for task_def in task_defs:
+            task_ir = pipelineIR.TaskIR(label=task_def.label, klass=task_def.taskName, config=[])
+            config_uri = config_dir_uri.join(f"{task_def.label}.py")
+            with config_uri.open("w") as buffer:
+                task_def.config.saveToStream(buffer)
+            task_ir.config.append(pipelineIR.ConfigIR(file=[f"config/{task_def.label}.py"]))
+            expanded_tasks[task_def.label] = task_ir
+        self._pipelineIR.write_to_uri(uri.join("pipeline.yaml"), expanded_tasks=expanded_tasks)
 
 
 @dataclass(frozen=True)
