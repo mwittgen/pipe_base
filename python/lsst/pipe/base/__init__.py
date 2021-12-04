@@ -6,6 +6,7 @@ from .butlerQuantumContext import *
 from .cmdLineTask import *
 from .config import *
 from .connections import *
+from .dotTools import *
 from .executionButlerBuilder import *
 from .graph import *
 from .graphBuilder import *
