@@ -35,6 +35,7 @@ import warnings
 #  Imports of standard modules --
 # -------------------------------
 from dataclasses import dataclass
+from pathlib import Path
 from types import MappingProxyType
 from typing import (
     TYPE_CHECKING,
@@ -372,6 +373,8 @@ class Pipeline:
                 )
             if uri.count("#") > 1:
                 raise ValueError("Only one set of labels is allowed when specifying a pipeline to load")
+            uri = ButlerURI(uri)
+        elif isinstance(uri, Path):
             uri = ButlerURI(uri)
         label_subset = uri.fragment or None
 
