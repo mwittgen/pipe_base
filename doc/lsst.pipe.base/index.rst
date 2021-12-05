@@ -101,3 +101,5 @@ Python API reference
 
 .. automodapi:: lsst.pipe.base.pipelineIR
   :no-main-docstr:
+
+.. automodapi:: lsst.pipe.base.pipeline_doc_builder
