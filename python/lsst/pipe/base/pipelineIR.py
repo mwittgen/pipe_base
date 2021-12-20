@@ -71,7 +71,7 @@ def standardize_uri_in_pipeline(path: str, directory: Optional[ResourcePath]) ->
     RuntimeError
         Raised if ``path`` is relative but ``directory`` is `None`.
     """
-    uri = ResourcePath(os.path.expandvars(path), forceAbsolute=False)
+    uri = ResourcePath(path, forceAbsolute=False)
     if not uri.isabs():
         if directory is not None:
             uri = directory.join(uri)
