@@ -53,7 +53,8 @@ from typing import (
 
 # -----------------------------
 #  Imports for other modules --
-from lsst.daf.butler import ButlerURI, DatasetType, NamedValueSet, Registry, SkyPixDimension
+from lsst.daf.butler import DatasetType, NamedValueSet, Registry, SkyPixDimension
+from lsst.resources import ResourcePath, ResourcePathExpression
 from lsst.utils import doImport
 from lsst.utils.introspection import get_full_type_name
 
@@ -245,27 +246,27 @@ class Pipeline:
         return cls.from_uri(filename)
 
     @classmethod
-    def from_uri(cls, uri: Union[str, ButlerURI]) -> Pipeline:
+    def from_uri(cls, uri: ResourcePathExpression) -> Pipeline:
         """Load a pipeline defined in a pipeline yaml file at a location
         specified by a URI.
 
         Parameters
         ----------
-        uri: `str` or `ButlerURI`
-           If a string is supplied this should be a URI path that points to a
-           pipeline defined in yaml format, either as a direct path to the yaml
-           file, or as a directory containing a "pipeline.yaml" file (the form
-           used by `write_to_uri` with ``expand=True``). This uri may also
-           supply additional labels to be used in subsetting the loaded
-           Pipeline.  These labels are separated from the path by a \\#, and
-           may be specified as a comma separated list, or a range denoted as
-           beginning..end. Beginning or end may be empty, in which case the
-           range will be a half open interval. Unlike python iteration bounds,
-           end bounds are *INCLUDED*. Note that range based selection is not
-           well defined for pipelines that are not linear in nature, and
-           correct behavior is not guaranteed, or may vary from run to run. The
-           same specifiers can be used with a ButlerURI object, by being the
-           sole contents in the fragments attribute.
+        uri: convertible to `ResourcePath`
+            If a string is supplied this should be a URI path that points to a
+            pipeline defined in yaml format, either as a direct path to the
+            yaml file, or as a directory containing a "pipeline.yaml" file (the
+            form used by `write_to_uri` with ``expand=True``). This uri may
+            also supply additional labels to be used in subsetting the loaded
+            Pipeline.  These labels are separated from the path by a \\#, and
+            may be specified as a comma separated list, or a range denoted as
+            beginning..end. Beginning or end may be empty, in which case the
+            range will be a half open interval. Unlike python iteration bounds,
+            end bounds are *INCLUDED*. Note that range based selection is not
+            well defined for pipelines that are not linear in nature, and
+            correct behavior is not guaranteed, or may vary from run to run.
+            The same specifiers can be used with a `ResourcePath` object, by
+            being the sole contents in the fragments attribute.
 
         Returns
         -------
@@ -359,7 +360,7 @@ class Pipeline:
         return Pipeline.fromIR(self._pipelineIR.subset_from_labels(labelSet))
 
     @staticmethod
-    def _parse_file_specifier(uri: Union[str, ButlerURI]) -> Tuple[ButlerURI, Optional[LabelSpecifier]]:
+    def _parse_file_specifier(uri: ResourcePathExpression) -> Tuple[ResourcePath, Optional[LabelSpecifier]]:
         """Split appart a uri and any possible label subsets"""
         if isinstance(uri, str):
             # This is to support legacy pipelines during transition
@@ -373,9 +374,9 @@ class Pipeline:
                 )
             if uri.count("#") > 1:
                 raise ValueError("Only one set of labels is allowed when specifying a pipeline to load")
-            uri = ButlerURI(uri)
+            uri = ResourcePath(uri)
         elif isinstance(uri, Path):
-            uri = ButlerURI(uri)
+            uri = ResourcePath(uri)
         label_subset = uri.fragment or None
 
         specifier: Optional[LabelSpecifier]
@@ -595,7 +596,7 @@ class Pipeline:
 
     def write_to_uri(
         self,
-        uri: Union[str, ButlerURI],
+        uri: ResourcePathExpression,
         expand: bool = False,
         task_defs: Optional[Iterable[TaskDef]] = None,
     ) -> None:
@@ -603,11 +604,11 @@ class Pipeline:
 
         Parameters
         ----------
-        uri : `str` or `ButlerURI`
-            URI to write to; may have any scheme with `ButlerURI` write
-            or no scheme for a local file/directory.  Should have a ``.yaml``
-            extension if ``expand=False`` and a trailing slash (indicating
-            a directory-like URI) if ``expand=True``.
+        uri : convertible to `ResourcePath`
+            URI to write to; may have any scheme with `ResourcePath` write
+            support or no scheme for a local file/directory.  Should have a
+            ``.yaml`` extension if ``expand=False`` and a trailing slash
+            (indicating a directory-like URI) if ``expand=True``.
         expand : `bool`, optional
             If `False`, write the pipeline to a single YAML file with
             references to configuration files and other config overrides
@@ -627,7 +628,7 @@ class Pipeline:
                 raise RuntimeError(
                     f"Expanded pipelines are written to directories, not YAML files like {uri}."
                 )
-            self._write_expanded_dir(ButlerURI(uri, forceDirectory=True), task_defs=task_defs)
+            self._write_expanded_dir(ResourcePath(uri, forceDirectory=True), task_defs=task_defs)
         else:
             self._pipelineIR.write_to_uri(uri)
 
@@ -741,16 +742,16 @@ class Pipeline:
         """The string description of the pipeline."""
         return self._pipelineIR.description
 
-    def _write_expanded_dir(self, uri: ButlerURI, task_defs: Optional[Iterable[TaskDef]] = None) -> None:
+    def _write_expanded_dir(self, uri: ResourcePath, task_defs: Optional[Iterable[TaskDef]] = None) -> None:
         """Internal implementation of `write_to_uri` with ``expand=True`` and
         a directory-like URI.
 
         Parameters
         ----------
-        uri : `str` or `ButlerURI`
-            URI to write to; may have any scheme with `ButlerURI` write or no
-            scheme for a local file/directory.  Should have a trailing slash
-            (indicating a directory-like URI).
+        uri : `ResourcePath`
+            URI to write to; may have any scheme with `ResourcePath` write
+            support or no scheme for a local file/directory.  Should have a
+            trailing slash (indicating a directory-like URI).
         task_defs : `Iterable` [ `TaskDef` ], optional
             Output of `toExpandedPipeline`; may be passed to avoid a second
             call to that method internally.

@@ -29,7 +29,7 @@ import inspect
 from enum import Enum
 from operator import attrgetter
 
-from lsst.daf.butler import ButlerURI
+from lsst.resources import ResourcePath
 from lsst.utils import doImport
 
 OverrideTypes = Enum("OverrideTypes", "Value File Python Instrument")
@@ -148,11 +148,11 @@ class ConfigOverrides:
 
         Parameters
         ----------
-        filename : `str` or `ButlerURI`
+        filename : convertible to `ResourcePath`
             Path or URI to the override file.  All URI schemes supported by
-            `ButlerURI` are supported.
+            `ResourcePath` are supported.
         """
-        self._overrides.append((OverrideTypes.File, ButlerURI(filename)))
+        self._overrides.append((OverrideTypes.File, ResourcePath(filename)))
 
     def addValueOverride(self, field, value):
         """Add override for a specific field.

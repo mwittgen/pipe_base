@@ -25,8 +25,8 @@ import textwrap
 import unittest
 
 import lsst.utils.tests
-from lsst.daf.butler import ButlerURI
 from lsst.pipe.base.pipelineIR import ConfigIR, PipelineIR
+from lsst.resources import ResourcePath
 
 TEST_DIR = os.path.join(os.path.dirname(__file__))
 
@@ -323,7 +323,7 @@ class PipelineIRTestCase(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             PipelineIR.from_string(pipeline_str)
         # and that this works when we provide a directory.
-        pipeline = PipelineIR.from_string(pipeline_str, ButlerURI(TEST_DIR))
+        pipeline = PipelineIR.from_string(pipeline_str, ResourcePath(TEST_DIR))
         self.assertEqual(set(pipeline.tasks.keys()), set(["modA", "modB"]))
 
     def testReadParameters(self):

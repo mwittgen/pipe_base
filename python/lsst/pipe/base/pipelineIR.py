@@ -41,14 +41,14 @@ from typing import Any, Dict, Generator, List, Mapping, MutableMapping, Optional
 
 import yaml
 from deprecated.sphinx import deprecated
-from lsst.daf.butler import ButlerURI
+from lsst.resources import ResourcePath, ResourcePathExpression
 
 
 class KeepInstrument:
     pass
 
 
-def standardize_uri_in_pipeline(path: str, directory: Optional[ButlerURI]) -> ButlerURI:
+def standardize_uri_in_pipeline(path: str, directory: Optional[ResourcePath]) -> ResourcePath:
     """Standardize a URI inside a pipeline description by expanding environment
     variables and interpreting (or rejecting) relative paths.
 
@@ -56,12 +56,12 @@ def standardize_uri_in_pipeline(path: str, directory: Optional[ButlerURI]) -> Bu
     ----------
     path : `str`
         Path to standardize.
-    directory : `ButlerURI` or `None`
+    directory : `ResourcePath` or `None`
         Directory URI that relative paths should be considered relative to.
 
     Returns
     -------
-    uri : `ButlerURI`
+    uri : `ResourcePath`
         Standardized URI.
 
     Raises
@@ -69,8 +69,8 @@ def standardize_uri_in_pipeline(path: str, directory: Optional[ButlerURI]) -> Bu
     RuntimeError
         Raised if ``path`` is relative but ``directory`` is `None`.
     """
-    # ButlerURI will expand variables automatically.
-    uri = ButlerURI(path, forceAbsolute=False)
+    # ResourcePath will expand variables automatically.
+    uri = ResourcePath(path, forceAbsolute=False)
     if not uri.isabs():
         if directory is not None:
             uri = directory.join(uri)
@@ -465,13 +465,13 @@ class ImportIR:
     declared instrument prior to import.
     """
 
-    def toPipelineIR(self, directory: Optional[ButlerURI] = None) -> "PipelineIR":
+    def toPipelineIR(self, directory: Optional[ResourcePath] = None) -> "PipelineIR":
         """Load in the Pipeline specified by this object, and turn it into a
         PipelineIR instance.
 
         Parameters
         ----------
-        directory : `ButlerURI` or `None`
+        directory : `ResourcePath` or `None`
             Directory URI that a relative ``location`` should be considered
             relative to.  Note that this is generally the directory of the
             pipeline containing the ``import`` directive, not the directory
@@ -539,7 +539,7 @@ class PipelineIR:
     loaded_yaml : `dict`
         A dictionary which matches the structure that would be produced by a
         yaml reader which parses a pipeline definition document
-    directory : `ButlerURI`, optional
+    directory : `ResourcePath`, optional
         The path to the directory in which the pipeline is defined.  Relative
         import and config file paths are interpreted as relative to this
         directory.  If `None` (default), relative paths are considered an
@@ -886,7 +886,7 @@ class PipelineIR:
         return pipeline
 
     @classmethod
-    def from_string(cls, pipeline_string: str, directory: Optional[ButlerURI] = None):
+    def from_string(cls, pipeline_string: str, directory: Optional[ResourcePath] = None):
         """Create a `PipelineIR` object from a string formatted like a pipeline
         document
 
@@ -894,7 +894,7 @@ class PipelineIR:
         ----------
         pipeline_string : `str`
             A string that is formatted according like a pipeline document
-        directory : `ButlerURI`, optional
+        directory : `ResourcePath`, optional
             The path to the directory in which the pipeline is defined.
             Relative import and config file paths are interpreted as relative
             to this directory.  If `None` (default), the directory must be
@@ -931,13 +931,13 @@ class PipelineIR:
         return cls.from_uri(filename)
 
     @classmethod
-    def from_uri(cls, uri: Union[str, ButlerURI]) -> PipelineIR:
+    def from_uri(cls, uri: ResourcePathExpression) -> PipelineIR:
         """Create a `PipelineIR` object from the document specified by the
         input uri.
 
         Parameters
         ----------
-        uri: `str` or `ButlerURI`
+        uri: convertible to `ResourcePath`
             Location of document to use in creating a `PipelineIR` object.
 
         Returns
@@ -945,10 +945,10 @@ class PipelineIR:
         pipelineIR : `PipelineIR`
             The loaded pipeline
         """
-        loaded_uri = ButlerURI(uri)
+        loaded_uri = ResourcePath(uri)
         with loaded_uri.open("r") as buffer:
             # explicitly read here, there was some issue with yaml trying
-            # to read the ButlerURI itself (I think because it only
+            # to read the ResourcePath itself (I think because it only
             # pretends to be conformant to the io api)
             loaded_yaml = yaml.load(buffer, Loader=PipelineYamlLoader)
             return cls(loaded_yaml, directory=loaded_uri.parent())
@@ -971,7 +971,7 @@ class PipelineIR:
 
     def write_to_uri(
         self,
-        uri: Union[ButlerURI, str],
+        uri: ResourcePathExpression,
         *,
         expanded_tasks: Optional[Mapping[str, TaskIR]] = None,
     ):
@@ -980,7 +980,7 @@ class PipelineIR:
 
         Parameters
         ----------
-        uri: `str` or `ButlerURI`
+        uri: convertible to
             Location of document to write a `PipelineIR` object.
         expanded_tasks : `Mapping` [ `str`, `TaskIR` ], optional
             Mapping containing replacement `TaskIR` objects that capture the
@@ -990,7 +990,7 @@ class PipelineIR:
             are sorted (using the order of the given tasks) to maximize the
             extent to which equivalent pipelines will be written identically.
         """
-        with ButlerURI(uri).open("w") as buffer:
+        with ResourcePath(uri).open("w") as buffer:
             yaml.dump(self.to_primitives(expanded_tasks=expanded_tasks), buffer, sort_keys=False)
 
     def to_primitives(self, expanded_tasks: Optional[Mapping[str, TaskIR]] = None) -> Dict[str, Any]:
