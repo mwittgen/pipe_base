@@ -174,6 +174,7 @@ class Task:
     def __init__(
         self,
         config: Optional[Config] = None,
+        *,
         name: Optional[str] = None,
         parentTask: Optional[Task] = None,
         log: Optional[Union[logging.Logger, lsst.utils.logging.LsstLogAdapter]] = None,
