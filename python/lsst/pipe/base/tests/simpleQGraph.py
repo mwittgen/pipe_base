@@ -127,7 +127,7 @@ class AddTask(PipelineTask):
     taskFactory: Optional[AddTaskFactoryMock] = None
     """Factory that makes instances"""
 
-    def run(self, input: int) -> Struct:  # type: ignore
+    def run(self, input: int) -> Struct:
 
         if self.taskFactory:
             # do some bookkeeping
