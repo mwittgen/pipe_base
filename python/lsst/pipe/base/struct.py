@@ -24,10 +24,11 @@ from __future__ import annotations
 
 __all__ = ["Struct"]
 
+from types import SimpleNamespace
 from typing import Any, Dict
 
 
-class Struct:
+class Struct(SimpleNamespace):
     """A container to which you can add fields as attributes.
 
     Parameters
@@ -143,9 +144,6 @@ class Struct:
             One-level-deep copy of this Struct.
         """
         return Struct(**self.getDict())
-
-    def __eq__(self, other: Any) -> bool:
-        return self.__dict__ == other.__dict__
 
     def __len__(self) -> int:
         return len(self.__dict__)
