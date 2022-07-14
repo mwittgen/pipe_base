@@ -60,7 +60,8 @@ from lsst.resources import ResourcePath, ResourcePathExpression
 from lsst.utils import doImportType
 from lsst.utils.introspection import get_full_type_name
 
-from . import pipelineIR, pipeTools
+from . import pipelineIR
+from ._pipeline_graph import PipelineGraph
 from ._task_metadata import TaskMetadata
 from .configOverrides import ConfigOverrides
 from .connections import iterConnections
@@ -705,8 +706,9 @@ class Pipeline:
                         f"Contract(s) '{contract.contract}' were not satisfied{extra_info}"
                     )
 
-        taskDefs = sorted(taskDefs, key=lambda x: x.label)
-        yield from pipeTools.orderPipeline(taskDefs)
+        graph = PipelineGraph.build(taskDefs).sorted()
+        sort_map = {label: n for n, label in enumerate(graph.tasks)}
+        yield from sorted(taskDefs, key=lambda x: sort_map[x.label])
 
     def _buildTaskDef(self, label: str) -> TaskDef:
         if (taskIR := self._pipelineIR.tasks.get(label)) is None:
